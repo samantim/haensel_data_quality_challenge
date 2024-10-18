@@ -18,6 +18,7 @@ def question1(con : sqlite3.Connection):
     # It is important to know combination of event_date and campaign_id columns make an unique index in 'api_adwords_costs' table
     # Since for every 'event_date' and 'campaign_id' in 'api_adwords_costs' table there are several sessions and cpc s in the 'session_sources' table, we have to calculate the average of their cpc to multiply to clicks
     query = """select api_adwords_costs.event_date,api_adwords_costs.campaign_id, sum(distinct api_adwords_costs.cost) as cost_from_api_adwords_costs, ROUND(cast(coalesce(avg(session_sources.cpc),0) as numeric)*sum(distinct api_adwords_costs.clicks), 3) as cost_from_session_sources
+                , ROUND(cast(coalesce(avg(session_sources.cpc),0) as numeric)*sum(distinct api_adwords_costs.clicks), 3) - sum(distinct api_adwords_costs.cost) as difference
                 from api_adwords_costs left join session_sources on session_sources.event_date = api_adwords_costs.event_date and session_sources.campaign_id = api_adwords_costs.campaign_id
                 group by api_adwords_costs.event_date,api_adwords_costs.campaign_id"""
 
@@ -49,6 +50,11 @@ def question1(con : sqlite3.Connection):
     # Save the image file
     plt.savefig(fname=f"output/cost_comparison_based_on_event_date.png", format="png", dpi = fig.dpi)  
 
+    # Print 5 records from +/- sides which have the most difference 
+    sorted_date = data_groupby.sort_values(["difference"],ascending=False)
+    print(f"Cost comparison based on event_date:\n{sorted_date.head(5)}")
+    print(f"Cost comparison based on event_date:\n{sorted_date.tail(5)}")
+
     # Clear the plot canvas
     plt.clf()
 
@@ -67,24 +73,29 @@ def question1(con : sqlite3.Connection):
     # Save the image file
     plt.savefig(fname=f"output/cost_comparison_based_on_campaign_id.png", format="png", dpi = fig.dpi)  
 
+    # Print 5 records from +/- sides which have the most difference 
+    sorted_date = data_groupby.sort_values(["difference"],ascending=False)
+    print(f"Cost comparison based on campaign_id:\n{sorted_date.head(5)}")
+    print(f"Cost comparison based on campaign_id:\n{sorted_date.tail(5)}")
+
 
 def question2(con : sqlite3.Connection):
     # Are the conversions in the 'conversions' table stable over time? Any pattern?
+    # This query returns sum of revenue for each conversion date
     query = """select conv_date, sum(revenue) as sum_revenue
                 from conversions
                 group by conv_date
                 order by conv_date"""
     
-    # plot the differences
     fig = plt.figure(figsize=(16, 9), dpi=300)
     # Get all data from the query
     data = pd.read_sql(sql=query,con=con)
     # Only show the day for better visualization
     data["conv_date"] = data["conv_date"].str[-2:]
 
+    # Plot the line of sum of revenue changes based over time
     sns.lineplot(data, x="conv_date", y="sum_revenue")
     plt.title("conversions over time")
-    # plt.xlabel("")
     plt.ylabel("sum of revenue")
     plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
     plt.savefig(fname=f"output/conversions_over_time.png", format="png", dpi = fig.dpi)  
@@ -92,60 +103,61 @@ def question2(con : sqlite3.Connection):
 
 def question3(con : sqlite3.Connection):
     # Double check conversions ('conversions' table) with backend ('conversions_backend' table), any issues?
+    # This query returns the comparison between sum of conversion from conversions and backend based on conv_date
     query_conv_date = """select conversions.conv_date as conv_date, sum(conversions.revenue) as conversions_sum_revenue, sum(conversions_backend.revenue) as conversions_backend_sum_revenue
                         from conversions inner join conversions_backend on conversions.conv_id = conversions_backend.conv_id
                         group by conversions.conv_date
                         order by conv_date"""
     
-    # plot the differences
     fig = plt.figure(figsize=(16, 9), dpi=300)
     # Get all data from the query
     data = pd.read_sql(sql=query_conv_date,con=con)
     # Only show the day for better visualization
     data["conv_date"] = data["conv_date"].str[-2:]
 
+    # Bar plot to campare revenues
     data.plot.bar(x="conv_date", y=["conversions_sum_revenue", "conversions_backend_sum_revenue"])
     plt.title("conversions over time")
     plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
     plt.savefig(fname=f"output/conversions_vs_backend_conv_date.png", format="png", dpi = fig.dpi)  
 
-
+    # This query returns the comparison between sum of conversion from conversions and backend based on market
     query_market = """select conversions.market as market, sum(conversions.revenue) as conversions_sum_revenue, sum(conversions_backend.revenue) as conversions_backend_sum_revenue
                         from conversions inner join conversions_backend on conversions.conv_id = conversions_backend.conv_id
                         group by conversions.market
                         order by market"""
     
-    # plot the differences
     fig = plt.figure(figsize=(16, 9), dpi=300)
     # Get all data from the query
     data = pd.read_sql(sql=query_market,con=con)
 
+    # Bar plot to campare revenues
     data.plot.bar(x="market", y=["conversions_sum_revenue", "conversions_backend_sum_revenue"])
     plt.title("conversions over market")
     plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
     plt.savefig(fname=f"output/conversions_vs_backend_market.png", format="png", dpi = fig.dpi)  
 
-
+    # This query returns the differences between to tables based on conv_date order by difference amount
     query_conv_date = """select conv_date, sum(conversions_backend_revenue) as conversions_backend_sum_revenue
                         from(select conversions.conv_date as conv_date, conversions.market as market, conversions.revenue as conversions_revenue, conversions_backend.revenue as conversions_backend_revenue
                         from conversions cross join conversions_backend on conversions.conv_id = conversions_backend.conv_id
                         where conversions.revenue <> conversions_backend.revenue) as q
                         group by conv_date
-                        order by conv_date"""
+                        order by conversions_backend_sum_revenue desc"""
     
-    # plot the differences
     fig = plt.figure(figsize=(16, 9), dpi=300)
     # Get all data from the query
     data = pd.read_sql(sql=query_conv_date,con=con)
     # Only show the day for better visualization
     data["conv_date"] = data["conv_date"].str[-2:]
 
+     # Bar plot to show the amount of differences
     data.plot.bar(x="conv_date", y=["conversions_backend_sum_revenue"])
     plt.title("conversions differences based on time")
     plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
     plt.savefig(fname=f"output/conversions_differnces_conv_date.png", format="png", dpi = fig.dpi)  
 
-
+    # This query returns the differences between to tables based on market order by difference amount
     query_market = """select market, sum(conversions_backend_revenue) as conversions_backend_sum_revenue
                     from(select conversions.conv_date as conv_date, conversions.market as market, conversions.revenue as conversions_revenue, conversions_backend.revenue as conversions_backend_revenue
                     from conversions cross join conversions_backend on conversions.conv_id = conversions_backend.conv_id
@@ -153,11 +165,11 @@ def question3(con : sqlite3.Connection):
                     group by market
                     order by conversions_backend_sum_revenue desc"""
 
-    # plot the differences
     fig = plt.figure(figsize=(16, 9), dpi=300)
     # Get all data from the query
     data = pd.read_sql(sql=query_market,con=con)
 
+    # Bar plot to show the amount of differences
     data.plot.bar(x="market", y=["conversions_backend_sum_revenue"])
     plt.title("conversions differences based on market")
     plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
@@ -166,6 +178,7 @@ def question3(con : sqlite3.Connection):
 
 def question4(con : sqlite3.Connection):
     # Are attribution results consistent? Do you find any conversions where the 'ihc' values don't make sense?
+    # This query returns the sum of ihc for every conv_id which should be 1. The results with value not equal to 1 are considered as inconsistency
     query = """select conv_id, round(sum(ihc)) as sum_ihc
                 from attribution_customer_journey
                 group by conv_id
@@ -173,10 +186,12 @@ def question4(con : sqlite3.Connection):
     
     # Get all data from the query
     data = pd.read_sql(sql=query,con=con)
-    print(data)
+    print(f"Attributions with inconsistent ihc sum:\n{data}")
 
 def question5_subplot(df : pd.DataFrame, sub_index : int, channel_name : str):
+    # This function is responsible to create the subplot and prevents code redundancy
     plt.subplot(5,1,sub_index)
+    # Only show the day for better visualization
     df["event_date"] = df["event_date"].str[-2:]
     sns.lineplot(df, x="event_date", y="session_count")
     plt.title(channel_name)
@@ -185,6 +200,8 @@ def question5_subplot(df : pd.DataFrame, sub_index : int, channel_name : str):
 
 def question5(con : sqlite3.Connection):
     # (Bonus) Do we have an issue with channeling? Are the number of sessions per channel stable over time?
+    # This query returns the count of sessions based on channel_name and event_date
+    # Since there are some duplicate channel names which present in the table with different names, they are unified with case when block
     query = """select channel_name , event_date, coalesce(count(session_id),0) as session_count
                 from(select case when channel_name = "Affiliates" then "Affiliate" 
                 when channel_name = "Direct" then "Direct Traffic" 
@@ -203,22 +220,28 @@ def question5(con : sqlite3.Connection):
     data = pd.read_sql(query,con=con)
     data.sort_values(["channel_name", "event_date"])
 
+    # This code block is responsible for creating subplot for each channel_name, and shows the number of sessions over time
     i = 0
     sub_index = 1
     df = pd.DataFrame()
     channel_name = data.loc[i,"channel_name"]
     fig = plt.figure(figsize=(16, 9), dpi=300)
+    # Loop over all records
     while i < data.shape[0] :
         if channel_name != data.loc[i,"channel_name"]:
+            # Create a subplot for the channel_name
             question5_subplot(df, sub_index, channel_name)
             if sub_index % 5 == 0:
                 plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
+                # Save the sob plot to a file
                 plt.savefig(fname=f"output/channel_session_count{i}.png", format="png", dpi = fig.dpi)
                 sub_index = 0
                 plt.clf()
             sub_index += 1
+            # Clear the dataframe
             df.drop(axis="index", index=df.index, inplace=True) 
 
+        # add the record to a new dataframe
         channel_name = data.loc[i,"channel_name"]
         row = df.shape[0]
         df.loc[row,"event_date"] = data.loc[i,"event_date"]
@@ -226,11 +249,13 @@ def question5(con : sqlite3.Connection):
 
         i += 1
 
+    # Create a subplot for the channel_name
     question5_subplot(df, sub_index, channel_name)
     sub_index += 1
     df.drop(axis="index", index=df.index, inplace=True) 
 
     plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
+    # Save the sob plot to a file
     plt.savefig(fname=f"output/channel_session_count{i}.png", format="png", dpi = fig.dpi)
 
 
