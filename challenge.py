@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sns
 
+
 def connect_db(db_path : str) -> sqlite3.Connection:
+    # Create a connection to run the queries
     con = sqlite3.connect(db_path)
     return con
 
@@ -16,8 +18,8 @@ def question1(con : sqlite3.Connection):
     # It is important to know combination of event_date and campaign_id columns make an unique index in 'api_adwords_costs' table
     # Since for every 'event_date' and 'campaign_id' in 'api_adwords_costs' table there are several sessions and cpc s in the 'session_sources' table, we have to calculate the average of their cpc to multiply to clicks
     query = """select api_adwords_costs.event_date,api_adwords_costs.campaign_id, sum(distinct api_adwords_costs.cost) as cost_from_api_adwords_costs, ROUND(cast(coalesce(avg(session_sources.cpc),0) as numeric)*sum(distinct api_adwords_costs.clicks), 3) as cost_from_session_sources
-            from api_adwords_costs left join session_sources on session_sources.event_date = api_adwords_costs.event_date and session_sources.campaign_id = api_adwords_costs.campaign_id
-            group by api_adwords_costs.event_date,api_adwords_costs.campaign_id"""
+                from api_adwords_costs left join session_sources on session_sources.event_date = api_adwords_costs.event_date and session_sources.campaign_id = api_adwords_costs.campaign_id
+                group by api_adwords_costs.event_date,api_adwords_costs.campaign_id"""
 
     data = pd.read_sql(sql=query,con=con)
     print(f"There are {data.shape[0]} rows for comparison")
@@ -26,7 +28,6 @@ def question1(con : sqlite3.Connection):
     data = pd.read_sql(sql=query + f" having ROUND(cast(coalesce(avg(session_sources.cpc),0) as numeric)*sum(distinct api_adwords_costs.clicks), 3) not between sum(distinct api_adwords_costs.cost)*{1-plus_minus} and sum(distinct api_adwords_costs.cost)*{1+plus_minus}""",con=con)
     print(f"There are {data.shape[0]} rows with more than {plus_minus*100}% difference")
 
-    # plot the differences
     fig = plt.figure(figsize=(16, 9), dpi=300)
     # Get all data from the query
     data = pd.read_sql(sql=query,con=con)
@@ -35,16 +36,17 @@ def question1(con : sqlite3.Connection):
     data_groupby = data.groupby(by=["event_date"]).sum()
     # Only show the day for better visualization
     data_groupby.index = data_groupby.index.str[-2:]
+    # Plot lines of cost_from_api_adwords_costs and cost_from_session_sources based on event_date
     sns.lineplot(data_groupby, x="event_date", y="cost_from_api_adwords_costs")
     sns.lineplot(data_groupby, x="event_date", y="cost_from_session_sources")
     plt.title("Cost comparison based on event_date")
-    # plt.xlabel("")
     plt.ylabel("costs")
     # Create proper legends
     zero_patch = mpatches.Patch(color = "blue", label="cost_from_api_adwords_costs")
     one_patch = mpatches.Patch(color = "orange", label="cost_from_session_sources")
     plt.legend(handles=[zero_patch, one_patch], loc="upper right")
     plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
+    # Save the image file
     plt.savefig(fname=f"output/cost_comparison_based_on_event_date.png", format="png", dpi = fig.dpi)  
 
     # Clear the plot canvas
@@ -52,16 +54,17 @@ def question1(con : sqlite3.Connection):
 
     # Group data by campaign_id
     data_groupby = data.groupby(by=["campaign_id"]).sum()
+    # Plot lines of cost_from_api_adwords_costs and cost_from_session_sources based on campaign_id
     sns.lineplot(data_groupby, x="campaign_id", y="cost_from_api_adwords_costs")
     sns.lineplot(data_groupby, x="campaign_id", y="cost_from_session_sources")
     plt.title("Cost comparison based on campaign_id")
-    # plt.xlabel("")
     plt.ylabel("costs")
     # Create proper legends
     zero_patch = mpatches.Patch(color = "blue", label="cost_from_api_adwords_costs")
     one_patch = mpatches.Patch(color = "orange", label="cost_from_session_sources")
     plt.legend(handles=[zero_patch, one_patch], loc="upper right")
-    plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
+    plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5)
+    # Save the image file
     plt.savefig(fname=f"output/cost_comparison_based_on_campaign_id.png", format="png", dpi = fig.dpi)  
 
 
