@@ -155,7 +155,7 @@ def question3(con : sqlite3.Connection):
     data.plot.bar(x="conv_date", y=["conversions_backend_sum_revenue"])
     plt.title("conversions differences based on time")
     plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
-    plt.savefig(fname=f"output/conversions_differnces_conv_date.png", format="png", dpi = fig.dpi)  
+    plt.savefig(fname=f"output/conversions_differences_conv_date.png", format="png", dpi = fig.dpi)  
 
     # This query returns the differences between to tables based on market order by difference amount
     query_market = """select market, sum(conversions_backend_revenue) as conversions_backend_sum_revenue
@@ -173,7 +173,7 @@ def question3(con : sqlite3.Connection):
     data.plot.bar(x="market", y=["conversions_backend_sum_revenue"])
     plt.title("conversions differences based on market")
     plt.tight_layout(pad=1, h_pad=0.5, w_pad=0.5) 
-    plt.savefig(fname=f"output/conversions_differnces_market.png", format="png", dpi = fig.dpi)  
+    plt.savefig(fname=f"output/conversions_differences_market.png", format="png", dpi = fig.dpi)  
 
 
 def question4(con : sqlite3.Connection):
