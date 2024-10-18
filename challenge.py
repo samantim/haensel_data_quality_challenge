@@ -179,10 +179,11 @@ def question3(con : sqlite3.Connection):
 def question4(con : sqlite3.Connection):
     # Are attribution results consistent? Do you find any conversions where the 'ihc' values don't make sense?
     # This query returns the sum of ihc for every conv_id which should be 1. The results with value not equal to 1 are considered as inconsistency
-    query = """select conv_id, round(sum(ihc)) as sum_ihc
+    query = """select conv_id, round(sum(ihc),2) as sum_ihc
                 from attribution_customer_journey
                 group by conv_id
-                having round(sum(ihc)) <> 1"""
+                having round(sum(ihc)) <> 1
+				order by sum_ihc"""
     
     # Get all data from the query
     data = pd.read_sql(sql=query,con=con)
